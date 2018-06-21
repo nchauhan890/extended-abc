@@ -4,7 +4,7 @@
 # separate parts of __new__()
 # into functions to ease readability
 #
-# update documentation to take into account parameter object
+# update documentation to take into account parameter object --> done!
 # re-comment
 
 
@@ -140,10 +140,7 @@ class Abstract(type):
                     value = abstractmethod(value)
                     # print(value.abstract)
 
-        if parameters.checkforparameters == 'bases':
-            parameterbase = bases
-        else:
-            parameterbase = cls.mro()[1:-1]
+        parameterbase = mcls._get_parameterbase(cls, bases, parameters)
 
         # print('parameterbase:', cls.__name__, '\n\n', parameterbase)
         for base in parameterbase:
@@ -188,6 +185,7 @@ class Abstract(type):
                            **{name: base for base in _bases
                            if getattr(base, 'abstract', False)
                            for name in base.abstractmethods}}
+            basemethods = mcls._get_base_methods(bases)
 
             for name, base in basemethods.items():
                 try:
@@ -204,27 +202,7 @@ from class \'{}\''.format(
                     # errors.append([e, name])
                     errors.append(e)
 
-            if parameters.checkforattributes == 'class':
-                cls._attributes = [name for name, value in cls.__dict__.items()
-                                   if not callable(value)]
-
-            elif parameters.checkforattributes == 'bases':
-                cls._attributes = [*[name for name, value in
-                                   cls.__dict__.items()
-                                   if not callable(value)],
-                                   *[name for base in bases
-                                   for name, value in base.__dict__.items()
-                                   if getattr(base, 'abstract', False)
-                                   if not callable(value)]]
-
-            else:
-                cls._attributes = [*[name for name, value in
-                                   cls.__dict__.items()
-                                   if callable(value)],
-                                   *[name for base in cls.mro()[1:-1]
-                                   for name, value in base.__dict__.items()
-                                   if getattr(base, 'abstract', False)
-                                   if not callable(value)]]
+            cls._attributes = mcls._get_attributes(cls, bases, parameters)
 
             for base in parameterbase:
                 if getattr(base, 'abstract', False):
@@ -268,13 +246,61 @@ must be implemented in subclass \'{}\' from class \'{}\''.format(
 
     def __init__(cls, name, bases, dct, **kwargs):
         return super().__init__(name, bases, dct)
+    
+    def _get_base_methods(bases):
+        return 
+    
+    def _get_attributes(cls, bases, parameters):
+        """returns a list of the class' attributes 
+        from the class itself and abstract parent classes.
+        
+        Depending on the checkformethods parameter in the Parameter
+        object passed, a different list will be returned
+        """
+        if parameters.checkforattributes == 'class':
+                attributes = [name for name, value in cls.__dict__.items()
+                                   if not callable(value)]
+                # add each name in cls.__dict__ if it is not callable
 
+            elif parameters.checkforattributes == 'bases':
+                attributes = [*[name for name, value in
+                                   cls.__dict__.items()
+                                   if not callable(value)],
+                                   *[name for base in bases
+                                   for name, value in base.__dict__.items()
+                                   if getattr(base, 'abstract', False)
+                                   if not callable(value)]]
+            # do the same as above, but this time unpack into a list
+            # along with the unpacked 2nd list. The second list
+            # contains the names in base.__dict__ if it is not callable
+            # and assuming the base has an abstract attribute of True
+            # (repeats for all bases passed in in the bases parameter)
+
+            else:
+                attributes = [*[name for name, value in
+                                   cls.__dict__.items()
+                                   if callable(value)],
+                                   *[name for base in cls.mro()[1:-1]
+                                   for name, value in base.__dict__.items()
+                                   if getattr(base, 'abstract', False)
+                                   if not callable(value)]]
+                # do the same as above, but using the passed class' mro()
+                # to specify base classes instead
+            
+            return attributes
+    
     def _get_methods(cls, bases, parameters):
-        # this adds adds a list of methods available to the class
-        # from the class itself and abstract parent classes
+        """returns a list of methods available to the class
+        from the class itself and abstract parent classes.
+        
+        Depending on the checkformethods parameter in the Parameter
+        object passed, a different list will be returned
+        """
         if parameters.checkformethods == 'class':
             methods = [name for name, value in cls.__dict__.items()
                        if callable(value)]
+            # add the name of the entry in cls.__dict__ if it is
+            # callable
 
         elif parameters.checkformethods == 'bases':
             methods = [*[name for name, value in cls.__dict__.items()
@@ -283,6 +309,11 @@ must be implemented in subclass \'{}\' from class \'{}\''.format(
                        for name, value in base.__dict__.items()
                        if getattr(base, 'abstract', False)
                        if callable(value)]]
+            # do the same as above, but this time unpack into a list
+            # along with the unpacked 2nd list. The second list
+            # contains the entries in base.__dict__ if it is callable
+            # and assuming the base has an abstract attribute of True
+            # (repeats for all bases passed in in the bases parameter)
 
         else:
             methods = [*[name for name, value in cls.__dict__.items()
@@ -291,11 +322,25 @@ must be implemented in subclass \'{}\' from class \'{}\''.format(
                        for name, value in base.__dict__.items()
                        if getattr(base, 'abstract', False)
                        if callable(value)]]
+            # same as above, but use the passed class' mro() to specify
+            # base classes instead of the bases parameter
+            
         return methods
+    
+    def _get_parameterbase(cls, bases, parameters):
+        """return the list of base classes to check for parameters"""
+        if parameters.checkforparameters == 'bases':
+            return bases
+        else:
+            return cls.mro()[1:-1]
 
     def _check_parameters(parameters):
+        """checks the input of parameter object is valid
+        
+        returns list of TypeErrors to be passed to formaterror()"""
         typeerrors = []
-        """checks the input of parameter object is valid"""
+        # if any invalid entries are given, raise an exception and catch it
+        # inside a try/except block.
         if parameters.overrideimplementation not in (True, False):
             try:
                 raise TypeError('parameter \'overrideimplementation\' must be \
@@ -376,3 +421,4 @@ either \'bases\' or \
 \'Parameter\' instance')
             except TypeError as e:
                 typeerrors.append(e)
+        return typeerrors
